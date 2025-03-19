@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String   @unique
+  password  String
+  userType  UserType @default(STUDENT)
+  createdAt DateTime @default(now())
+  debates   Debate[]
+}
+
+enum Status {
+  ACTIVE
+  COMPLETED
+}
+
+model Debate {
+  id            String              @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String
+  userId        String              @db.ObjectId
+  user          User                @relation(fields: [userId], references: [id])
+  sides         String[]
+  status        Status              @default(ACTIVE)
+  createdAt     DateTime            @default(now())
+  contributions Contribution[]
+  participants  DebateParticipant[]
+  removeUsers   String[]
+}
+
+model DebateParticipant {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  debateId     String   @db.ObjectId
+  debate       Debate   @relation(fields: [debateId], references: [id])
+  userName     String
+  firstThought String?
+  lastThought  String?
+  Name         String
+  side         String
+  joinedAt     DateTime @default(now())
+
+  @@unique([debateId, userName])
+}
+
+model Contribution {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  debateId   String   @db.ObjectId
+  debate     Debate   @relation(fields: [debateId], references: [id])
+  authorName String
+  authorId   String
+  side       String
+  content    String
+  timestamp  DateTime @default(now())
+  likes      Int      @default(0)
+  dislikes   Int      @default(0)
+  awards     String[]
+}

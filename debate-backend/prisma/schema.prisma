@@ -38,19 +38,30 @@ model Debate {
   createdAt     DateTime            @default(now())
   contributions Contribution[]
   participants  DebateParticipant[]
-  removeUsers   String[]
+  removeUsers String[]
+  raiseHand   raiseHand[]
+}
+
+model raiseHand {
+  id         String            @id @default(auto()) @map("_id") @db.ObjectId
+  debateId   String            @db.ObjectId
+  debate     Debate            @relation(fields: [debateId], references: [id])
+  authorId   String
+  author     DebateParticipant @relation(fields: [authorId], references: [id])
+  isSelected Boolean           @default(false)
 }
 
 model DebateParticipant {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  debateId     String   @db.ObjectId
-  debate       Debate   @relation(fields: [debateId], references: [id])
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  debateId     String      @db.ObjectId
+  debate       Debate      @relation(fields: [debateId], references: [id])
   userName     String
   firstThought String?
   lastThought  String?
   Name         String
   side         String
-  joinedAt     DateTime @default(now())
+  joinedAt     DateTime    @default(now())
+  raiseHand    raiseHand[]
 
   @@unique([debateId, userName])
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useRef, useMemo } from "react";
 import socket from "../../../../components/socket";
 import { ContributionCard } from "./contribution-card";
@@ -25,22 +27,34 @@ import {
 } from "recharts";
 
 const DebatePage = ({ debate }) => {
+    console.log("DebatePage loaded with debate:", debate);
     const [debateData, setDebateData] = useState(debate);
     const [contributions, setContributions] = useState([]);
     const [isTeacher, setIsTeacher] = useState(false);
+    // For student’s raise hand record.
+    const [raisedHand, setRaisedHand] = useState(null);
+    // For teacher’s list of raised hands.
+    const [raiseHands, setRaiseHands] = useState(debate.raiseHand || []);
+    const [canSpeak, setCanSpeak] = useState(false);
     const [studentJoinOpen, setStudentJoinOpen] = useState(false);
     const [user, setUser] = useState(null);
     const [isRemoved, setIsRemoved] = useState(false);
     const [isAwardDialogOpen, setIsAwardDialogOpen] = useState(false);
     const [selectedContribution, setSelectedContribution] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeMobileTab, setActiveMobileTab] = useState('contributions'); // Mobile tab state
+    const [activeMobileTab, setActiveMobileTab] = useState("contributions");
+
+    // Loading states for buttons.
+    const [raiseHandLoading, setRaiseHandLoading] = useState(false);
+    const [approvingSpeakId, setApprovingSpeakId] = useState(null);
 
     const contributionsEndRef = useRef(null);
     const { user: authUser } = useUser();
 
     const filteredContributions = useMemo(() => {
-        return contributions.filter((c) => !debateData.removeUsers?.includes(c.authorId));
+        return contributions.filter(
+            (c) => !debateData.removeUsers?.includes(c.authorId)
+        );
     }, [contributions, debateData.removeUsers]);
 
     const computedSideDistribution = useMemo(() => {
@@ -56,7 +70,8 @@ const DebatePage = ({ debate }) => {
                 debateData.sides.forEach((side) => (groups[timeBucket][side] = 0));
             }
             groups[timeBucket].total += 1;
-            if (debateData.sides.includes(c.side)) groups[timeBucket][c.side] += 1;
+            if (debateData.sides.includes(c.side))
+                groups[timeBucket][c.side] += 1;
         });
         return Object.keys(groups)
             .sort()
@@ -64,7 +79,10 @@ const DebatePage = ({ debate }) => {
                 const bucket = groups[time];
                 const result = { time };
                 debateData.sides.forEach((side) => {
-                    result[side] = bucket.total > 0 ? Math.round((bucket[side] / bucket.total) * 100) : 0;
+                    result[side] =
+                        bucket.total > 0
+                            ? Math.round((bucket[side] / bucket.total) * 100)
+                            : 0;
                 });
                 return result;
             });
@@ -80,7 +98,8 @@ const DebatePage = ({ debate }) => {
         const total = filteredContributions.length;
         const result = {};
         debateData.sides.forEach((side) => {
-            result[side] = total > 0 ? Math.round((sideCounts[side] / total) * 100) : 0;
+            result[side] =
+                total > 0 ? Math.round((sideCounts[side] / total) * 100) : 0;
         });
         return result;
     }, [filteredContributions, debateData.sides]);
@@ -91,27 +110,26 @@ const DebatePage = ({ debate }) => {
         const now = new Date();
         const diffMs = now - createdAt;
         const totalMinutes = Math.floor(diffMs / 60000);
-
-        if (totalMinutes < 60) {
-            return `${totalMinutes}m`;
-        } else {
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
-            return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-        }
+        return totalMinutes < 60 ? `${totalMinutes}m` : `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
     }, [debateData.createdAt]);
 
+    // Join the debate room.
     useEffect(() => {
-        socket.emit("joinDebate", debateData.id);
+        if (debateData?.id) {
+            socket.emit("joinDebate", debateData.id);
+        }
     }, [debateData.id]);
 
+    // Listen for contribution events.
     useEffect(() => {
         socket.on("newContribution", (newContribution) => {
             setContributions((prev) => [...prev, newContribution]);
         });
         socket.on("updateContribution", (updatedContribution) => {
             setContributions((prev) =>
-                prev.map((c) => (c.id === updatedContribution.id ? updatedContribution : c))
+                prev.map((c) =>
+                    c.id === updatedContribution.id ? updatedContribution : c
+                )
             );
         });
         return () => {
@@ -125,32 +143,36 @@ const DebatePage = ({ debate }) => {
         setIsLoading(false);
     }, [debateData]);
 
+    // Set the user.
     useEffect(() => {
         if (authUser?.userType === "TEACHER") {
-            setUser({ id: authUser.id, name: authUser.name || "Teacher", role: "teacher" });
+            setUser({
+                id: authUser.id,
+                name: authUser.name || "Teacher",
+                role: "teacher",
+            });
             setIsTeacher(true);
-        }
-    }, [authUser]);
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem("debate-user");
-        if (storedUser) {
-            try {
-                const parsedUser = JSON.parse(storedUser);
-                if (parsedUser.debate === debateData.id) {
-                    setUser({
-                        id: parsedUser.id,
-                        name: parsedUser.Name,
-                        role: "student",
-                        side: parsedUser.side,
-                    });
+        } else {
+            const storedUser = localStorage.getItem("debate-user");
+            if (storedUser) {
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    if (parsedUser.debate === debateData.id) {
+                        setUser({
+                            id: parsedUser.id,
+                            name: parsedUser.Name,
+                            role: "student",
+                            side: parsedUser.side,
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error parsing debate user:", error);
                 }
-            } catch (error) {
-                console.error("Error parsing debate user:", error);
             }
         }
-    }, [debateData]);
+    }, [authUser, debateData]);
 
+    // Scroll to the bottom for new contributions.
     useEffect(() => {
         contributionsEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [filteredContributions]);
@@ -173,23 +195,32 @@ const DebatePage = ({ debate }) => {
     }, [debateData, user]);
 
     const handleStudentJoin = async (userName, name, thought, side) => {
-        const payload = { debate: debateData.id, userName, Name: name, firstThought: thought, side };
+        const payload = {
+            debate: debateData.id,
+            userName,
+            Name: name,
+            firstThought: thought,
+            side,
+        };
         try {
             const res = await axios.post(
                 `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/debate/${debateData.id}/join`,
                 payload
             );
             setUser({ id: res.data.id, name, role: "student", side });
-            localStorage.setItem("debate-user", JSON.stringify({
-                id: res.data.id,
-                debate: debateData.id,
-                Name: res.data.Name,
-                side: res.data.side,
-            }));
+            localStorage.setItem(
+                "debate-user",
+                JSON.stringify({
+                    id: res.data.id,
+                    debate: debateData.id,
+                    Name: res.data.Name,
+                    side: res.data.side,
+                })
+            );
             setStudentJoinOpen(false);
             toast.success(`You've joined the "${side}" side`);
         } catch (error) {
-            console.log("Error joining debate:", error);
+            console.error("Error joining debate:", error);
             toast.error("Failed to join debate. Please try again.");
         }
     };
@@ -203,13 +234,18 @@ const DebatePage = ({ debate }) => {
             content,
         };
         socket.emit("sendContribution", contributionData, (ack) => {
-            if (ack?.status !== "ok") toast.error("Failed to submit your contribution");
+            if (ack?.status !== "ok")
+                toast.error("Failed to submit your contribution");
             onAck();
         });
     };
 
     const handleReact = (contributionId, reaction) => {
-        socket.emit("reactContribution", { contributionId, debateId: debateData.id, reaction });
+        socket.emit("reactContribution", {
+            contributionId,
+            debateId: debateData.id,
+            reaction,
+        });
     };
 
     const handleOpenAwardDialog = (contributionId) => {
@@ -217,28 +253,162 @@ const DebatePage = ({ debate }) => {
         setIsAwardDialogOpen(true);
     };
 
+    // Student-specific: listen for raised-hand update/remove.
+    useEffect(() => {
+        if (!user || user.role !== "student") return;
+        socket.on("updateRaiseHand", (updatedRaiseHand) => {
+            if (String(updatedRaiseHand.authorId) === String(user.id)) {
+                setRaisedHand(updatedRaiseHand);
+                setCanSpeak(updatedRaiseHand.isSelected);
+            }
+        });
+        socket.on("removeRaiseHand", (data) => {
+            console.log("Student received removeRaiseHand:", data);
+            if (raisedHand && String(raisedHand.id) === String(data.raiseHandId)) {
+                setRaisedHand(null);
+                setCanSpeak(false);
+            }
+        });
+        return () => {
+            socket.off("updateRaiseHand");
+            socket.off("removeRaiseHand");
+        };
+    }, [user, raisedHand]);
+
+    // Teacher-specific: listen for raised-hand events.
+    useEffect(() => {
+        if (!user || user.role !== "teacher") return;
+        socket.on("newRaiseHand", (newRaiseHand) => {
+            setRaiseHands((prev) => [...prev, newRaiseHand]);
+        });
+        socket.on("updateRaiseHand", (updatedRaiseHand) => {
+            setRaiseHands((prev) =>
+                prev.map((r) =>
+                    String(r.id) === String(updatedRaiseHand.id) ? updatedRaiseHand : r
+                )
+            );
+        });
+        socket.on("removeRaiseHand", (data) => {
+            console.log("Teacher received removeRaiseHand:", data);
+            const removedId = data?.raiseHandId;
+            if (removedId) {
+                setRaiseHands((prev) =>
+                    prev.filter((r) => String(r.id) !== String(removedId))
+                );
+            }
+        });
+        return () => {
+            socket.off("newRaiseHand");
+            socket.off("updateRaiseHand");
+            socket.off("removeRaiseHand");
+        };
+    }, [user]);
+
+    // Student: handle Raise Hand click.
+    const handleRaiseHand = () => {
+        if (!user) {
+            toast.error("User not available.");
+            return;
+        }
+        setRaiseHandLoading(true);
+        socket.emit(
+            "raiseHand",
+            { debateId: debateData.id, authorId: user.id },
+            (ack) => {
+                setRaiseHandLoading(false);
+                if (ack.status === "ok") {
+                    setRaisedHand(ack.raiseHand);
+                    toast.success("Hand raised successfully!");
+                } else if (ack.status === "alreadyRaised") {
+                    toast.info("You have already raised your hand.");
+                } else {
+                    toast.error("Failed to raise hand.");
+                }
+            }
+        );
+    };
+
+    const handleFinishSpeaking = () => {
+        if (!raisedHand) return;
+        setRaiseHandLoading(true);
+        socket.emit(
+            "clearRaiseHand",
+            { debateId: debateData.id, raiseHandId: raisedHand.id },
+            (ack) => {
+                setRaiseHandLoading(false);
+                if (ack.status === "ok") {
+                    setRaisedHand(null);
+                    setCanSpeak(false);
+                } else {
+                    toast.error("Failed to clear raise hand.");
+                }
+            }
+        );
+    };
+
+    // Teacher: handle Approve Speak click.
+    const handleApproveSpeak = (raiseHandId) => {
+        setApprovingSpeakId(raiseHandId);
+        socket.emit(
+            "approveSpeak",
+            { debateId: debateData.id, raiseHandId },
+            (ack) => {
+                setApprovingSpeakId(null);
+                if (ack.status === "ok") {
+                    toast.success("Approved speaking request.");
+                } else {
+                    toast.error("Failed to approve speaking.");
+                }
+            }
+        );
+    };
+
+    // Teacher: handle Remove Speak button (to revoke approval).
+    const handleRevokeSpeak = (raiseHandId) => {
+        setApprovingSpeakId(raiseHandId);
+        socket.emit(
+            "clearRaiseHand",
+            { debateId: debateData.id, raiseHandId },
+            (ack) => {
+                setApprovingSpeakId(null);
+                if (ack.status === "ok") {
+                    toast.success("Removed speaking permission.");
+                } else {
+                    toast.error("Failed to remove speaking permission.");
+                }
+            }
+        );
+    };
+
     const handleGiveAward = (contributionId, award) => {
-        socket.emit("awardContribution", { contributionId, debateId: debateData.id, award });
+        socket.emit("awardContribution", {
+            contributionId,
+            debateId: debateData.id,
+            award,
+        });
         toast.success("Award given successfully!");
     };
 
-    const handleRemove = (removeUserId = user.id) => {
-        socket.emit("removeUser", { debateId: debateData.id, userId: removeUserId }, (err, updatedDebate) => {
-            if (err) {
-                console.error(err);
-            } else if (removeUserId === user.id) {
-                localStorage.removeItem("debate-user");
-                localStorage.setItem("remove", "true");
-                setUser(null);
-                setIsRemoved(true);
-                toast.error("You have been removed from this debate.");
-            } else {
-                toast.success("User has been removed from the debate.");
+    const handleRemove = (removeUserId = user?.id) => {
+        socket.emit(
+            "removeUser",
+            { debateId: debateData.id, userId: removeUserId },
+            (err, updatedDebate) => {
+                if (err) {
+                    console.error(err);
+                } else if (removeUserId === user?.id) {
+                    localStorage.removeItem("debate-user");
+                    localStorage.setItem("remove", "true");
+                    setUser(null);
+                    setIsRemoved(true);
+                    toast.error("You have been removed from this debate.");
+                } else {
+                    toast.success("User has been removed from the debate.");
+                }
             }
-        });
+        );
     };
 
-    // **Chart Rendering**
     const renderSideDistributionChart = () => {
         const data = computedSideDistribution;
         if (!data.length) {
@@ -248,14 +418,12 @@ const DebatePage = ({ debate }) => {
                 </div>
             );
         }
-
         const sides = Object.keys(data[0]).filter((key) => key !== "time");
         const colors = ["#8884d8", "#82ca9d", "#ff7300", "#ffbb28", "#00c49f"];
         const sideColors = sides.reduce((acc, side, index) => {
             acc[side] = colors[index % colors.length];
             return acc;
         }, {});
-
         return (
             <div className="w-full h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -263,20 +431,10 @@ const DebatePage = ({ debate }) => {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="time" />
                         <YAxis label={{ value: "%", position: "insideLeft", offset: -5 }} />
-                        <Tooltip
-                            formatter={(value, name) => [`${value}%`, name]}
-                            labelFormatter={(label) => `Time: ${label}`}
-                        />
+                        <Tooltip formatter={(value, name) => [`${value}%`, name]} labelFormatter={(label) => `Time: ${label}`} />
                         <Legend />
                         {sides.map((side) => (
-                            <Line
-                                key={side}
-                                type="monotone"
-                                dataKey={side}
-                                stroke={sideColors[side]}
-                                strokeWidth={2}
-                                dot={false}
-                            />
+                            <Line key={side} type="monotone" dataKey={side} stroke={sideColors[side]} strokeWidth={2} dot={false} />
                         ))}
                     </LineChart>
                 </ResponsiveContainer>
@@ -284,7 +442,6 @@ const DebatePage = ({ debate }) => {
         );
     };
 
-    // **Render Logic**
     if (isRemoved) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 p-4">
@@ -315,44 +472,61 @@ const DebatePage = ({ debate }) => {
                 onAward={handleGiveAward}
                 contributionId={selectedContribution || ""}
             />
-
             <div className="flex flex-col h-[calc(100vh-4rem)]">
-                <div className="border-b px-4 sm:px-6 bg-background  fixed w-full top-0 z-10">
+                <div className="border-b px-4 sm:px-6 bg-background fixed w-full top-0 z-10">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-center gap-3">
                             <div>
-                                <h1 className="text-xl  mt-4 font-mono font-semibold capitalize line-clamp-1">
+                                <h1 className="text-xl mt-4 font-mono font-semibold capitalize line-clamp-1">
                                     {debateData.name}
                                 </h1>
                                 <div className="flex items-center gap-2 pb-2 text-sm text-muted-foreground">
                                     <span>{debateData.user?.name}</span>
-
                                 </div>
                             </div>
                         </div>
+                        {user?.role === "student" && (
+                            <>
+                                {!raisedHand ? (
+                                    <button
+                                        onClick={handleRaiseHand}
+                                        disabled={raiseHandLoading}
+                                        className="mb-2 px-4 py-2 bg-blue-500 text-white rounded-md"
+                                    >
+                                        {raiseHandLoading ? "Loading..." : "Raise Hand"}
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleFinishSpeaking}
+                                        disabled={raiseHandLoading}
+                                        className={`mb-2 px-4 py-2 rounded-md ${canSpeak ? "bg-blue-500 text-white" : "bg-red-500 text-white"
+                                            }`}
+                                    >
+                                        {raiseHandLoading ? "Loading..." : canSpeak ? "You Can Speak Now" : "Hand Raised"}
+                                    </button>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
                 <div className="flex justify-around py-2 bg-gray-100 md:hidden">
                     <button
-                        className={`px-4 py-2 rounded-md ${activeMobileTab === 'contributions' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'}`}
-                        onClick={() => setActiveMobileTab('contributions')}
+                        className={`px-4 py-2 rounded-md ${activeMobileTab === "contributions" ? "bg-blue-500 text-white" : "bg-white text-gray-700"}`}
+                        onClick={() => setActiveMobileTab("contributions")}
                     >
                         Contributions
                     </button>
                     {isTeacher && (
                         <button
-                            className={`px-4 py-2 rounded-md ${activeMobileTab === 'analytics' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'}`}
-                            onClick={() => setActiveMobileTab('analytics')}
+                            className={`px-4 py-2 rounded-md ${activeMobileTab === "analytics" ? "bg-blue-500 text-white" : "bg-white text-gray-700"}`}
+                            onClick={() => setActiveMobileTab("analytics")}
                         >
                             Analytics
                         </button>
                     )}
                 </div>
-
-                {/* Main Layout */}
                 <div className="grid grid-cols-1 pt-20 md:grid-cols-3 gap-0">
-                    {/* Contributions */}
-                    <div className={`${activeMobileTab === 'contributions' ? 'block' : 'hidden'} md:block md:col-span-2`}>
+                    <div className={`${activeMobileTab === "contributions" ? "block" : "hidden"} md:block md:col-span-2`}>
                         <div className="flex-1 gap-3 overflow-y-auto p-4 sm:p-6">
                             {isLoading ? (
                                 <Loader />
@@ -392,14 +566,9 @@ const DebatePage = ({ debate }) => {
                             )}
                             <div ref={contributionsEndRef} />
                         </div>
-
-                        {/* Contribution Form */}
                         <div id="contribution-form" className="max-w-4xl mx-auto pt-6 pb-4">
                             {user ? (
-                                <ContributionForm
-                                    onSubmit={handleSubmitContribution}
-                                    userSide={user.side || "Neutral"}
-                                />
+                                <ContributionForm onSubmit={handleSubmitContribution} userSide={user.side || "Neutral"} />
                             ) : (
                                 <Card className="border shadow-sm">
                                     <CardContent className="p-6 flex flex-col items-center justify-center text-center">
@@ -412,75 +581,58 @@ const DebatePage = ({ debate }) => {
                             )}
                         </div>
                     </div>
-
-                    <div className={`${activeMobileTab === 'analytics' ? 'block' : 'hidden'} md:block  md:col-span-1 md:border-l md:overflow-y-auto `}>
+                    <div className={`${activeMobileTab === "analytics" ? "block" : "hidden"} md:block md:col-span-1 md:border-l md:overflow-y-auto`}>
                         <Tabs defaultValue="participants" className="w-full">
                             <TabsList className="w-full flex border-b">
-                                <TabsTrigger
-                                    value="participants"
-                                    className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white"
-                                >
+                                <TabsTrigger value="participants" className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white">
                                     Participants
                                 </TabsTrigger>
                                 {isTeacher && (
-                                    <TabsTrigger
-                                        value="stats"
-                                        className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white"
-                                    >
-                                        Stats
-                                    </TabsTrigger>
+                                    <>
+                                        <TabsTrigger value="hands" className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white">
+                                            Raised Hands
+                                        </TabsTrigger>
+                                        <TabsTrigger value="stats" className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white">
+                                            Stats
+                                        </TabsTrigger>
+                                    </>
                                 )}
                             </TabsList>
                             <TabsContent value="participants" className="p-4 space-y-4">
-
-                            <div>
-                                <h3 className="font-medium font-sans mb-2">Participants</h3>
-                                <div className="space-y-2">
-                                    {debateData.participants
-                                        .filter((p) => !debateData.removeUsers?.includes(p.id))
-                                        .map((participant) => (
-                                            <details
-                                                key={participant.id}
-                                                className="group border rounded-lg"
-                                            >
-                                                <summary className="flex items-center justify-between p-4 cursor-pointer list-none">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium capitalize">{participant.Name}</span>
-                                                        <span className="text-sm text-muted-foreground">({participant.side})</span>
-                                                    </div>
-                                                    <svg
-                                                        className="w-4 h-4 transition-transform group-open:rotate-180"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                        strokeWidth={2}
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                                    </svg>
-                                                </summary>
-                                                {participant.firstThought && (
-                                                    <div className="p-4 pt-0">
-                                                        <div className="bg-muted/50 rounded-md p-3">
-                                                            <p className="text-sm text-muted-foreground mb-1">First Thought:</p>
-                                                            <p className="text-sm">{participant.firstThought}</p>
+                                <div>
+                                    <h3 className="font-medium font-sans mb-2">Participants</h3>
+                                    <div className="space-y-2">
+                                        {debateData.participants
+                                            .filter((p) => !debateData.removeUsers?.includes(p.id))
+                                            .map((participant) => (
+                                                <details key={participant.id} className="group border rounded-lg">
+                                                    <summary className="flex items-center justify-between p-4 cursor-pointer list-none">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium capitalize">{participant.Name}</span>
+                                                            <span className="text-sm text-muted-foreground">({participant.side})</span>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </details>
-                                        ))}
+                                                        <svg className="w-4 h-4 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </summary>
+                                                    {participant.firstThought && (
+                                                        <div className="p-4 pt-0">
+                                                            <div className="bg-muted/50 rounded-md p-3">
+                                                                <p className="text-sm text-muted-foreground mb-1">First Thought:</p>
+                                                                <p className="text-sm">{participant.firstThought}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </details>
+                                            ))}
+                                    </div>
                                 </div>
-                            </div>
-
-
                                 <Separator />
                                 <div>
                                     <h3 className="font-medium font-sans mb-2">Participation by Side</h3>
                                     {debateData.sides.map((side) => {
                                         const count = filteredContributions.filter((c) => c.side === side).length;
-                                        const percentage = filteredContributions.length > 0
-                                            ? Math.round((count / filteredContributions.length) * 100)
-                                            : 0;
+                                        const percentage = filteredContributions.length > 0 ? Math.round((count / filteredContributions.length) * 100) : 0;
                                         return (
                                             <div key={side} className="mb-3">
                                                 <div className="flex justify-between text-sm mb-1">
@@ -494,36 +646,71 @@ const DebatePage = ({ debate }) => {
                                 </div>
                             </TabsContent>
                             {isTeacher && (
-                                <TabsContent value="stats" className="p-4 space-y-4">
-                                    {renderSideDistributionChart()}
-                                    <div>
-                                        <h3 className="font-medium font-sans mb-3">Debate Insights</h3>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="bg-gray-100 p-3 rounded-md">
-                                                <p className="text-xs text-gray-500">Contributions</p>
-                                                <p className="text-xl font-semibold">{filteredContributions.length}</p>
-                                            </div>
-                                            <div className="bg-gray-100 p-3 rounded-md">
-                                                <p className="text-xs text-gray-500">Participants</p>
-                                                <p className="text-xl font-semibold">
-                                                    {debateData.participants.filter((p) => !debateData.removeUsers?.includes(p.id)).length}
-                                                </p>
-                                            </div>
-                                            <div className="bg-gray-100 p-3 rounded-md">
-                                                <p className="text-xs text-gray-500">Leading Side</p>
-                                                <p className="text-xl font-semibold">
-                                                    {Object.keys(overallSideDistribution).length > 0
-                                                        ? `${Object.entries(overallSideDistribution).reduce((a, b) => a[1] > b[1] ? a : b)[0]} (${Object.entries(overallSideDistribution).reduce((a, b) => a[1] > b[1] ? a : b)[1]}%)`
-                                                        : "N/A"}
-                                                </p>
-                                            </div>
-                                            <div className="bg-gray-100 p-3 rounded-md">
-                                                <p className="text-xs text-gray-500">Duration</p>
-                                                <p className="text-xl font-semibold">{debateDuration}</p>
+                                <>
+                                    <TabsContent value="stats" className="p-4 space-y-4">
+                                        {renderSideDistributionChart()}
+                                        <div>
+                                            <h3 className="font-medium font-sans mb-3">Debate Insights</h3>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="bg-gray-100 p-3 rounded-md">
+                                                    <p className="text-xs text-gray-500">Contributions</p>
+                                                    <p className="text-xl font-semibold">{filteredContributions.length}</p>
+                                                </div>
+                                                <div className="bg-gray-100 p-3 rounded-md">
+                                                    <p className="text-xs text-gray-500">Participants</p>
+                                                    <p className="text-xl font-semibold">
+                                                        {debateData.participants.filter((p) => !debateData.removeUsers?.includes(p.id)).length}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-gray-100 p-3 rounded-md">
+                                                    <p className="text-xs text-gray-500">Leading Side</p>
+                                                    <p className="text-xl font-semibold">
+                                                        {Object.keys(overallSideDistribution).length > 0
+                                                            ? `${Object.entries(overallSideDistribution).reduce((a, b) => (a[1] > b[1] ? a : b))[0]} (${Object.entries(overallSideDistribution).reduce((a, b) => (a[1] > b[1] ? a : b))[1]}%)`
+                                                            : "N/A"}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-gray-100 p-3 rounded-md">
+                                                    <p className="text-xs text-gray-500">Duration</p>
+                                                    <p className="text-xl font-semibold">{debateDuration}</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </TabsContent>
+                                    </TabsContent>
+                                    <TabsContent value="hands" className="p-4 space-y-4">
+                                        <div className="p-4 border-l">
+                                            <h2 className="text-lg font-medium mb-4">Raised Hands</h2>
+                                            {raiseHands.length === 0 ? (
+                                                <p>No raised hands.</p>
+                                            ) : (
+                                                raiseHands.map((rh) => (
+                                                    <div key={rh.id} className="flex items-center justify-between mb-2 p-2 bg-gray-50 rounded">
+                                                        <span className="font-semibold">{rh.author?.Name || rh.authorId}</span>
+                                                        {rh.isSelected ? (
+                                                            // Once approved, teacher sees a "Remove Speak" button.
+                                                            <button
+                                                                onClick={() => handleRevokeSpeak(rh.id)}
+                                                                disabled={approvingSpeakId === rh.id}
+                                                                className="px-3 py-1 rounded bg-yellow-500 text-white"
+                                                            >
+                                                                {approvingSpeakId === rh.id ? "Loading..." : "Remove Speak"}
+                                                            </button>
+                                                        ) : (
+                                                            // Not yet approved, show "Allow Speak" button.
+                                                            <button
+                                                                onClick={() => handleApproveSpeak(rh.id)}
+                                                                disabled={approvingSpeakId === rh.id}
+                                                                className="px-3 py-1 rounded bg-red-500 text-white"
+                                                            >
+                                                                {approvingSpeakId === rh.id ? "Loading..." : "Allow Speak"}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </TabsContent>
+                                </>
                             )}
                         </Tabs>
                     </div>

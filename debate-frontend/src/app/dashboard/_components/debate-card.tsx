@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { useState } from "react";
 import Link from "next/link";
-
+import { QRCodeSVG } from 'qrcode.react';
 export const DebateCard = ({ debate, onDelete }: any) => {
     console.log("🚀 ~ DebateCard ~ debate:", debate)
     const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -71,7 +71,7 @@ export const DebateCard = ({ debate, onDelete }: any) => {
                     </Badge>
                 </div>
                 <CardDescription className="line-clamp-2">
-                    {debate.discription || "No description provided"}
+                    {debate.description || "No description provided"}
                 </CardDescription>
             </CardHeader>
             <CardContent className="pt-2 pb-4">
@@ -107,18 +107,17 @@ export const DebateCard = ({ debate, onDelete }: any) => {
                         <div className="py-6">
                             <div className="space-y-4">
                                 <div className="flex flex-col items-center justify-center">
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-sm text-muted-foreground mb-2">
                                         Share this code with your students to join the debate
                                     </p>
+                                    <QRCodeSVG value={`${process.env.NEXT_PUBLIC_BASE}/debate/${debate.id}?newjoin=true`} />
                                 </div>
                                 <div className="flex justify-center gap-2 pt-4">
                                     <Button variant="outline" onClick={handleCopyJoinCode}>
-                                        Copy Code
+                                        Copy Link
                                     </Button>
                                     <Link href={`/debate/${debate.id}`}>
-
-                                        <Button
-                                        >
+                                        <Button>
                                             Open Debate
                                         </Button>
                                     </Link>

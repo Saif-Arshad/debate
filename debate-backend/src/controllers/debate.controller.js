@@ -39,9 +39,14 @@ exports.getDebate = async (req, res) => {
 
         const debate = await prisma.debate.findUnique({
             where: { id },
-            include: { user: true, contributions: true, participants: true  },
+            include: {
+                user: true, contributions: true, participants: true, raiseHand: {
+                    include: {
+                        author: true
+                    }
+                }
+            },
         });
-
         if (!debate) {
             return res.status(404).json({
                 success: false,

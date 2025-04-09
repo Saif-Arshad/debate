@@ -25,6 +25,7 @@ import {
     Legend,
     ResponsiveContainer,
 } from "recharts";
+import { Mic, MicOff } from "lucide-react";
 
 const DebatePage = ({ debate }) => {
     console.log("DebatePage loaded with debate:", debate);
@@ -491,17 +492,22 @@ const DebatePage = ({ debate }) => {
                                     <button
                                         onClick={handleRaiseHand}
                                         disabled={raiseHandLoading}
-                                        className="mb-2 px-4 py-2 bg-blue-500 text-white rounded-md"
+                                        className="mb-2 px-4 py-2 flex items-center  gap-1 bg-blue-500 text-white rounded-md"
                                     >
+                                        ✋
                                         {raiseHandLoading ? "Loading..." : "Raise Hand"}
                                     </button>
                                 ) : (
                                     <button
                                         onClick={handleFinishSpeaking}
                                         disabled={raiseHandLoading}
-                                        className={`mb-2 px-4 py-2 rounded-md ${canSpeak ? "bg-blue-500 text-white" : "bg-red-500 text-white"
+                                        className={`mb-2 px-4 py-2 flex items-center gap-1 rounded-md ${canSpeak ? "bg-blue-500 text-white" : "bg-red-500 text-white"
                                             }`}
                                     >
+                                        {
+                                                !canSpeak ? <MicOff className="h-4 w-5" /> : <Mic className="h-4 w-5" />
+                                        }
+
                                         {raiseHandLoading ? "Loading..." : canSpeak ? "You Can Speak Now" : "Hand Raised"}
                                     </button>
                                 )}
@@ -590,7 +596,7 @@ const DebatePage = ({ debate }) => {
                                 {isTeacher && (
                                     <>
                                         <TabsTrigger value="hands" className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white">
-                                            Raised Hands
+                                            Raised Hands ({raiseHands.length})
                                         </TabsTrigger>
                                         <TabsTrigger value="stats" className="flex-1 text-center py-2 px-4 cursor-pointer bg-gray-50 border-b-2 border-transparent hover:bg-gray-100 data-[state=active]:border-blue-500 data-[state=active]:bg-white">
                                             Stats
@@ -685,13 +691,16 @@ const DebatePage = ({ debate }) => {
                                             ) : (
                                                 raiseHands.map((rh) => (
                                                     <div key={rh.id} className="flex items-center justify-between mb-2 p-2 bg-gray-50 rounded">
-                                                        <span className="font-semibold">{rh.author?.Name || rh.authorId}</span>
+                                                     <div className="flex flex-col items-start">
+                                                        <span className="font-semibold capitalize">{rh.author?.Name || rh.authorId}</span>
+                                                            <span className=" capitalize text-xs">{rh.author?.side || rh.authorId}</span>
+                                                     </div>
                                                         {rh.isSelected ? (
                                                             // Once approved, teacher sees a "Remove Speak" button.
                                                             <button
                                                                 onClick={() => handleRevokeSpeak(rh.id)}
                                                                 disabled={approvingSpeakId === rh.id}
-                                                                className="px-3 py-1 rounded bg-yellow-500 text-white"
+                                                                className="px-3 py-2 rounded-md bg-yellow-500 text-white"
                                                             >
                                                                 {approvingSpeakId === rh.id ? "Loading..." : "Remove Speak"}
                                                             </button>
@@ -700,7 +709,7 @@ const DebatePage = ({ debate }) => {
                                                             <button
                                                                 onClick={() => handleApproveSpeak(rh.id)}
                                                                 disabled={approvingSpeakId === rh.id}
-                                                                className="px-3 py-1 rounded bg-red-500 text-white"
+                                                                className="px-3 py-2 rounded-md bg-red-500 text-white"
                                                             >
                                                                 {approvingSpeakId === rh.id ? "Loading..." : "Allow Speak"}
                                                             </button>
